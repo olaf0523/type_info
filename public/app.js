@@ -139,6 +139,7 @@
     layers: '<path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/>',
     chevron: '<path d="m9 18 6-6-6-6"/>',
     arrowUpRight: '<path d="M7 17 17 7M8 7h9v9"/>',
+    reset: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
   };
   const icon = (name, size = 18) =>
     `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -156,9 +157,71 @@
   const revealBtn = $("#pin-reveal");
   const app = $("#app");
 
+  /* ---------- Lock illustration: each digit is engraved onto the lock as it is typed ---------- */
+  const art = $("#lockart");
+  const SLOT_X = [116, 158, 200, 242, 284];
+  const SLOT_Y = [392, 424, 456];
+  const SEAL_DELAY = 900;
+  const artSlots = [];
+  const sealTimers = [];
+
+  (function buildLockArt() {
+    const svgNS = "http://www.w3.org/2000/svg";
+    const slotsGroup = $(".lockart__slots", art);
+    for (let i = 0; i < PIN_LENGTH; i++) {
+      const slot = document.createElementNS(svgNS, "g");
+      slot.setAttribute("class", "lockart__slot");
+      slot.setAttribute("transform", `translate(${SLOT_X[i % 5]} ${SLOT_Y[Math.floor(i / 5)]})`);
+      slot.style.setProperty("--i", i);
+      slot.innerHTML = '<rect x="-17" y="-13" width="34" height="26" rx="6"/><path class="lockart__gem" d="M0 -7 L6 0 L0 7 L-6 0 Z"/><text class="lockart__digit" x="0" y="1"></text><circle class="lockart__spark" r="2.6"/>';
+      slotsGroup.append(slot);
+      artSlots.push(slot);
+    }
+    $(".lockart__ticks", art).innerHTML = Array.from({ length: 60 }, (_, k) =>
+      `<line class="${k % 5 ? "" : "is-major"}" x1="200" y1="254" x2="200" y2="${k % 5 ? 259 : 262}" transform="rotate(${k * 6} 200 300)"/>`).join("");
+  })();
+
+  function renderArt(value) {
+    const len = value.length;
+    let wrote = 0;
+    artSlots.forEach((slot, i) => {
+      const digit = slot.querySelector("text");
+      if (i < len) {
+        if (!slot.classList.contains("is-filled") || digit.textContent !== value[i]) {
+          digit.textContent = value[i];
+          // Several digits at once (paste) are engraved one after another.
+          slot.style.setProperty("--w-delay", `${wrote * 70}ms`);
+          slot.classList.remove("is-writing", "is-sealed");
+          slot.getBoundingClientRect();
+          slot.classList.add("is-filled", "is-writing");
+          clearTimeout(sealTimers[i]);
+          sealTimers[i] = setTimeout(() => slot.classList.add("is-sealed"), SEAL_DELAY + wrote * 70);
+          wrote++;
+        }
+      } else if (slot.classList.contains("is-filled")) {
+        clearTimeout(sealTimers[i]);
+        slot.classList.remove("is-filled", "is-writing", "is-sealed");
+        digit.textContent = "";
+      }
+      slot.classList.toggle("is-next", i === len);
+    });
+    if (wrote) {
+      art.classList.remove("is-writing");
+      art.getBoundingClientRect();
+      art.classList.add("is-writing");
+    }
+    const next = Math.min(len, PIN_LENGTH - 1);
+    art.style.setProperty("--pen-x", `${SLOT_X[next % 5] + 10}px`);
+    art.style.setProperty("--pen-y", `${SLOT_Y[Math.floor(next / 5)] + 9}px`);
+    art.style.setProperty("--dial", `${len * 24}deg`);
+    art.style.setProperty("--p", (len / PIN_LENGTH).toFixed(3));
+    art.classList.toggle("is-complete", len === PIN_LENGTH);
+  }
+
   let attempts = 0;
   let cooldownTimer = null;
   let busy = false;
+  let lockHideTimer = null;
 
   const cells = [];
   for (let i = 0; i < PIN_LENGTH; i++) {
@@ -191,6 +254,7 @@
       cell.classList.toggle("is-active", i === Math.min(value.length, PIN_LENGTH - 1));
       cell.firstChild.textContent = value[i] ?? "";
     });
+    renderArt(value);
     if (!cooldownTimer && !lock.classList.contains("is-error") && !lock.classList.contains("is-success")) {
       lockStatus.textContent = `${value.length} / ${PIN_LENGTH}`;
     }
@@ -228,7 +292,8 @@
       setLockState("success");
       lockStatus.textContent = "Unlocked";
       store.set(SESSION_KEY, "1");
-      setTimeout(unlock, 520);
+      // Leave time for the shackle to spring open before the lock screen fades.
+      setTimeout(unlock, 1000);
     } else {
       attempts++;
       setLockState("error");
@@ -272,6 +337,9 @@
   function unlock() {
     busy = false;
     lock.classList.add("is-unlocked");
+    // Once faded out, take the lock screen out of rendering so its animations stop costing frames.
+    clearTimeout(lockHideTimer);
+    lockHideTimer = setTimeout(() => { lock.hidden = true; }, lock.classList.contains("is-instant") ? 0 : 900);
     document.body.classList.remove("is-locked");
     app.inert = false;
     pinInput.blur();
@@ -288,6 +356,9 @@
     renderPin();
     app.inert = true;
     document.body.classList.add("is-locked");
+    clearTimeout(lockHideTimer);
+    lock.hidden = false;
+    lock.getBoundingClientRect(); // commit display before the fade-in transition
     lock.classList.remove("is-unlocked", "is-instant");
     setTimeout(() => pinInput.focus({ preventScroll: true }), 50);
   }
@@ -324,6 +395,7 @@
   revealBtn.addEventListener("click", () => {
     const on = !pin.classList.contains("is-revealed");
     pin.classList.toggle("is-revealed", on);
+    art.classList.toggle("is-revealed", on);
     revealBtn.setAttribute("aria-pressed", String(on));
     revealBtn.querySelector("span").textContent = on ? "Hide" : "Show";
   });
@@ -470,6 +542,7 @@
     const website = safeUrl(raw.website);
     return {
       index,
+      id: raw.type_url || name,
       name,
       website,
       host: hostOf(website),
@@ -555,6 +628,20 @@
     emptyState.hidden = view.length > 0 || !dataLoaded;
   }
 
+  /* ---------- Per-card color (radio buttons + reset) ---------- */
+  const TINT_KEY = "kaisha-index:card-tints";
+  const TINTS = [
+    { value: "yellow", label: "Yellow" },
+    { value: "green", label: "Grass green" },
+  ];
+  // Keyed by the company's type.jp URL so a card keeps its color through filtering, sorting and reloads.
+  const cardTints = new Map();
+  try {
+    for (const [id, tint] of Object.entries(JSON.parse(local.get(TINT_KEY) || "{}"))) {
+      if (TINTS.some((t) => t.value === tint)) cardTints.set(id, tint);
+    }
+  } catch { /* ignore malformed storage */ }
+
   function cardFact(iconName, label, value) {
     return `
       <div class="card__fact">
@@ -563,16 +650,35 @@
       </div>`;
   }
 
+  function tintControls(c, tint) {
+    const group = `card-tint-${c.index}`;
+    return `
+      <fieldset class="card-tint">
+        <legend class="sr-only">Card color: ${escapeHtml(c.name)}</legend>
+        <div class="card-tint__group">
+          ${TINTS.map((t) => `
+            <label class="card-tint__option">
+              <input type="radio" name="${group}" value="${t.value}"${tint === t.value ? " checked" : ""}>
+              <span class="swatch swatch--${t.value}" aria-hidden="true"></span>
+              <span>${t.label}</span>
+            </label>`).join("")}
+        </div>
+        <button class="card-tint__reset" type="button" aria-label="Reset card color" title="Reset color" aria-disabled="${tint ? "false" : "true"}">${icon("reset", 14)}</button>
+      </fieldset>`;
+  }
+
   function renderMore() {
     const slice = view.slice(rendered, rendered + BATCH);
     const frag = document.createDocumentFragment();
     slice.forEach((c, i) => {
       const li = document.createElement("li");
+      const tint = cardTints.get(c.id) || "";
       const sub = c.host
         ? `${icon("globe", 13)}<span>${highlight(c.host)}</span>`
         : c.representative ? `${icon("user", 13)}<span>${highlight(c.representative)}</span>` : "&nbsp;";
       li.innerHTML = `
-        <button class="card" type="button" data-pos="${rendered + i}" style="animation-delay:${Math.min(i, 20) * 30}ms">
+        <article class="card" data-id="${escapeHtml(c.id)}"${tint ? ` data-tint="${tint}"` : ""} style="animation-delay:${Math.min(i, 20) * 30}ms">
+          <button class="card__open" type="button" data-pos="${rendered + i}" aria-label="${escapeHtml(c.name)}"></button>
           <div class="card__top">
             ${logoTile(c)}
             <div class="card__title">
@@ -586,7 +692,8 @@
             ${cardFact("users", "Staff", formatEmployees(c.employeeCount))}
             ${cardFact("yen", "Capital", formatCapital(c.capitalYen))}
           </dl>
-        </button>`;
+          ${tintControls(c, tint)}
+        </article>`;
       frag.append(li);
     });
     grid.append(frag);
@@ -598,8 +705,8 @@
   }, { rootMargin: "800px 0px" }).observe(sentinel);
 
   grid.addEventListener("click", (e) => {
-    const card = e.target.closest(".card");
-    if (card) openModal(+card.dataset.pos, card);
+    const open = e.target.closest(".card__open");
+    if (open) openModal(+open.dataset.pos, open);
   });
 
   // Spotlight that follows the pointer across a card.
@@ -736,28 +843,39 @@
   });
 
   /* ======================================================================
-     SECTION TINT (radio buttons + reset)
+     CARD COLOR (per-company radio buttons + reset)
      ====================================================================== */
-  const section = $("#companies");
-  const tintRadios = $$('input[name="section-color"]');
-  const tintReset = $("#tint-reset");
+  function setCardTint(card, tint) {
+    const id = card.dataset.id;
+    if (tint) {
+      cardTints.set(id, tint);
+      card.dataset.tint = tint;
+    } else {
+      cardTints.delete(id);
+      delete card.dataset.tint;
+      $$('.card-tint input[type="radio"]', card).forEach((r) => (r.checked = false));
+    }
+    $(".card-tint__reset", card).setAttribute("aria-disabled", String(!tint));
+    local.set(TINT_KEY, JSON.stringify(Object.fromEntries(cardTints)));
+    if (!reducedMotion.matches) {
+      card.animate([{ scale: "1" }, { scale: "1.018" }, { scale: "1" }], { duration: 450, easing: "cubic-bezier(.34, 1.56, .64, 1)" });
+    }
+  }
 
-  tintRadios.forEach((radio) => radio.addEventListener("change", () => {
-    if (!radio.checked) return;
-    section.dataset.tint = radio.value;
-    tintReset.disabled = false;
-  }));
-
-  tintReset.addEventListener("click", () => {
-    tintRadios.forEach((r) => (r.checked = false));
-    delete section.dataset.tint;
-    tintReset.classList.remove("is-spinning");
-    void tintReset.offsetWidth;
-    tintReset.classList.add("is-spinning");
-    tintReset.disabled = true;
-    toast("Section color reset");
+  grid.addEventListener("change", (e) => {
+    const radio = e.target.closest('.card-tint input[type="radio"]');
+    if (radio?.checked) setCardTint(radio.closest(".card"), radio.value);
   });
-  tintReset.addEventListener("animationend", () => tintReset.classList.remove("is-spinning"));
+
+  grid.addEventListener("click", (e) => {
+    const reset = e.target.closest(".card-tint__reset");
+    if (!reset || reset.getAttribute("aria-disabled") === "true") return;
+    setCardTint(reset.closest(".card"), null);
+    if (!reducedMotion.matches) {
+      reset.querySelector("svg").animate([{ transform: "rotate(0deg)" }, { transform: "rotate(-360deg)" }], { duration: 650, easing: "cubic-bezier(.2, .8, .2, 1)" });
+    }
+    toast("Card color reset");
+  });
 
   /* ======================================================================
      MODAL
@@ -916,7 +1034,7 @@
     while (rendered <= next) renderMore();
     fillModal(next);
     swapAnimation(delta);
-    returnFocus = grid.querySelector(`.card[data-pos="${next}"]`);
+    returnFocus = grid.querySelector(`.card__open[data-pos="${next}"]`);
   }
 
   // Opens a company by its CSV index, clearing filters if they hide it.
@@ -930,7 +1048,7 @@
     }
     if (pos < 0) return;
     while (rendered <= pos) renderMore();
-    const card = grid.querySelector(`.card[data-pos="${pos}"]`);
+    const card = grid.querySelector(`.card__open[data-pos="${pos}"]`);
     if (modal.open) {
       setTab("info");
       fillModal(pos);

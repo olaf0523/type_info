@@ -401,18 +401,116 @@ mark { background: var(--mark-bg); color: inherit; border-radius: 4px; padding: 
   40%, 60% { transform: translateX(8px); }
 }
 
-.lock__icon {
-  display: grid; place-items: center; width: 60px; height: 60px; margin: 0 auto 16px;
-  border-radius: 18px; color: #fff;
-  background: linear-gradient(150deg, #2f93ff 0%, #1552c8 55%, #0a2358 100%);
-  border: 1px solid rgba(140, 190, 255, .4);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25), 0 14px 30px -10px rgba(30, 110, 255, .8);
-  transition: background .35s, box-shadow .35s;
+/* ---------- Lock stage: engraved-lock illustration beside the PIN card ---------- */
+:root { --art-glow: rgba(70, 140, 255, .42); --art-ring: rgba(40, 95, 210, .36); --art-ray: rgba(255, 255, 255, .7); }
+:root[data-theme="dark"] { --art-glow: rgba(56, 140, 255, .58); --art-ring: rgba(150, 200, 255, .3); --art-ray: rgba(140, 195, 255, .3); }
+
+.lock__stage { position: relative; display: flex; align-items: center; justify-content: center; gap: clamp(20px, 5vw, 76px); width: 100%; }
+.lockart { position: relative; flex: none; width: clamp(290px, 29vw, 420px); aspect-ratio: 400 / 520; animation: artIn 1.1s var(--ease) both; }
+@keyframes artIn { from { opacity: 0; transform: translateY(30px) scale(.94); } to { opacity: 1; transform: none; } }
+/* Glow, light beams and rings are separate composited layers, so rotating them never repaints the lock itself. */
+.lockart__fx { position: absolute; left: 50%; top: 57.69%; width: 100%; aspect-ratio: 1; transform: translate(-50%, -50%); pointer-events: none; }
+.lockart__glow, .lockart__rays, .lockart__ring { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; }
+.lockart__glow { background: radial-gradient(circle, var(--art-glow) 0%, transparent 68%); }
+.lockart__rays {
+  background: repeating-conic-gradient(from 0deg, var(--art-ray) 0deg, transparent 4deg 18.5deg, var(--art-ray) 22.5deg);
+  -webkit-mask: radial-gradient(circle, transparent 26%, #000 42%, transparent 72%);
+  mask: radial-gradient(circle, transparent 26%, #000 42%, transparent 72%);
+  animation: spin 90s linear infinite; will-change: transform;
 }
-.lock__shackle { transition: transform .45s var(--ease); transform-origin: 16px 10.5px; }
-.lock.is-success .lock__icon { background: linear-gradient(150deg, #34d399, #059669); box-shadow: 0 14px 30px -10px rgba(16, 185, 129, .8); }
-.lock.is-success .lock__shackle { transform: translateY(-2px) rotate(-28deg) translateX(-2px); transform-origin: 8px 10.5px; }
-.lock.is-error .lock__icon { background: linear-gradient(150deg, #fb7185, #e11d48); box-shadow: 0 14px 30px -10px rgba(225, 29, 72, .8); }
+.lockart__ring { overflow: visible; animation: spin 70s linear infinite; will-change: transform; }
+.lockart__ring circle { fill: none; stroke: var(--art-ring); stroke-width: 1.5; }
+.lockart__ring--1 circle { stroke-dasharray: 2 9; }
+.lockart__ring--2 { animation-duration: 48s; animation-direction: reverse; }
+.lockart__ring--2 circle { stroke-dasharray: 46 12 6 12; }
+.lockart__float { position: relative; width: 100%; height: 100%; animation: float 7s ease-in-out infinite; will-change: transform; }
+.lockart__svg { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 34px 44px rgba(5, 20, 60, .42)); }
+
+.lockart__dial, .lockart__burst { transform-box: view-box; transform-origin: 200px 300px; }
+.lockart__sparkle { fill: url(#lk-gold); opacity: 0; transform-box: fill-box; transform-origin: center; animation: sparkle 3.2s ease-in-out var(--d, 0s) infinite; }
+@keyframes sparkle { 0%, 100% { opacity: 0; transform: scale(.3) rotate(0deg); } 50% { opacity: 1; transform: scale(1) rotate(45deg); } }
+
+.lock.is-error .lockart__rig { animation: artShake .5s cubic-bezier(.36, .07, .19, .97) both; }
+@keyframes artShake {
+  10%, 90% { transform: translateX(-3px); }
+  20%, 80% { transform: translateX(5px); }
+  30%, 50%, 70% { transform: translateX(-10px); }
+  40%, 60% { transform: translateX(10px); }
+}
+
+/* Shackle springs open on success (pivots on its right leg) */
+.lockart__shackle { transform-box: view-box; transform-origin: 278px 236px; transition: transform .8s var(--ease-spring); }
+.lock.is-success .lockart__shackle { transform: translateY(-34px) rotate(24deg); }
+.lockart__sheen { animation: sheen 5.5s var(--ease) infinite; }
+@keyframes sheen { 0% { transform: skewX(-20deg) translateX(0); } 45%, 100% { transform: skewX(-20deg) translateX(620px); } }
+
+/* Combination dial + progress ring */
+.lockart__dial { transform: rotate(var(--dial, 0deg)); transition: transform .7s var(--ease-spring); }
+.lock.is-success .lockart__dial { transform: rotate(calc(var(--dial, 0deg) + 360deg)); transition-duration: 1.1s; }
+.lockart__ticks line { stroke: rgba(255, 228, 160, .5); stroke-width: 1.4; stroke-linecap: round; }
+.lockart__ticks line.is-major { stroke: #ffe08a; stroke-width: 2; }
+.lockart__progress-track { fill: none; stroke: rgba(255, 255, 255, .1); stroke-width: 5; }
+.lockart__progress {
+  fill: none; stroke: url(#lk-gold); stroke-width: 5; stroke-linecap: round;
+  stroke-dasharray: 100; stroke-dashoffset: calc(100 - var(--p, 0) * 100);
+  transition: stroke-dashoffset .55s var(--ease), stroke .3s; filter: url(#lk-glow);
+}
+.lock.is-error .lockart__progress { stroke: #fb7185; }
+.lockart__keyhole { fill: #030817; transition: fill .4s; }
+.lock.is-success .lockart__keyhole { fill: #ffe08a; filter: url(#lk-glow); }
+.lockart__burst { fill: none; stroke: #ffe08a; stroke-width: 3; opacity: 0; }
+.lock.is-success .lockart__burst { animation: burst 1.1s var(--ease) forwards; }
+@keyframes burst { 0% { opacity: .95; transform: scale(.35); stroke-width: 8; } 100% { opacity: 0; transform: scale(1.7); stroke-width: 1; } }
+
+/* Engraved digit slots */
+.lockart__slot rect { fill: rgba(2, 8, 24, .55); stroke: rgba(255, 215, 120, .28); stroke-width: 1.2; transition: fill .35s, stroke .35s; }
+.lockart__slot.is-next rect { stroke: #ffd86b; stroke-width: 1.6; animation: slotPulse 1.4s ease-in-out infinite; }
+@keyframes slotPulse { 50% { stroke-opacity: .3; } }
+.lockart__slot.is-filled rect { fill: rgba(255, 200, 80, .12); stroke: rgba(255, 216, 107, .85); }
+.lockart__digit {
+  font-family: var(--font-mono); font-size: 19px; font-weight: 700; text-anchor: middle; dominant-baseline: central;
+  fill: #fff3cf; fill-opacity: 0; stroke: #ffd86b; stroke-width: .9; paint-order: stroke;
+  stroke-dasharray: 64; stroke-dashoffset: 64; opacity: 0; transition: opacity .3s;
+}
+.lockart__slot.is-filled .lockart__digit { opacity: 1; fill-opacity: 1; stroke-dashoffset: 0; }
+.lockart__slot.is-writing .lockart__digit { animation: engrave .6s var(--ease) var(--w-delay, 0ms) both; }
+@keyframes engrave {
+  0% { stroke-dashoffset: 64; fill-opacity: 0; }
+  65% { stroke-dashoffset: 0; fill-opacity: 0; }
+  100% { stroke-dashoffset: 0; fill-opacity: 1; }
+}
+/* After writing, a digit is sealed behind a gold gem unless "Show" is on. */
+.lockart__slot.is-sealed .lockart__digit { opacity: 0; }
+.lockart.is-revealed .lockart__slot.is-sealed .lockart__digit { opacity: 1; }
+.lockart__gem { fill: url(#lk-gold); opacity: 0; transform-box: fill-box; transform-origin: center; transform: scale(.2) rotate(-45deg); transition: opacity .35s, transform .5s var(--ease-spring); filter: url(#lk-glow); }
+.lockart__slot.is-sealed .lockart__gem { opacity: 1; transform: none; }
+.lockart.is-revealed .lockart__slot .lockart__gem { opacity: 0; }
+.lockart__spark { fill: #fff; opacity: 0; filter: url(#lk-glow); }
+.lockart__slot.is-writing .lockart__spark { animation: spark .6s var(--ease) var(--w-delay, 0ms) both; }
+@keyframes spark {
+  0% { opacity: 0; transform: translate(-12px, 8px); }
+  15% { opacity: 1; }
+  75% { opacity: 1; transform: translate(10px, -6px); }
+  100% { opacity: 0; transform: translate(12px, -8px); }
+}
+.lock.is-error .lockart__slot.is-filled rect { fill: rgba(244, 63, 94, .3); stroke: #fb7185; }
+.lock.is-success .lockart__slot rect { fill: rgba(255, 216, 107, .4); stroke: #ffe08a; transition-delay: calc(var(--i, 0) * 30ms); }
+.lock.is-success .lockart__gem { fill: #fffbe8; }
+
+/* Writing pen: glides to the next slot and scribbles each digit */
+.lockart__pen { transform: translate(var(--pen-x, 126px), var(--pen-y, 401px)); transition: transform .45s var(--ease-spring), opacity .4s; filter: drop-shadow(0 6px 6px rgba(0, 0, 0, .35)); }
+.lockart__pen-inner { transform-box: fill-box; transform-origin: 0% 100%; animation: penBob 2.4s ease-in-out infinite; }
+.lockart.is-writing .lockart__pen-inner { animation: scribble .55s ease-in-out; }
+.lockart.is-complete .lockart__pen { opacity: 0; }
+@keyframes penBob { 50% { transform: translate(3px, -5px) rotate(-3deg); } }
+@keyframes scribble {
+  0% { transform: translate(-12px, 3px); }
+  20% { transform: translate(-2px, -4px); }
+  40% { transform: translate(-8px, 3px); }
+  60% { transform: translate(2px, -3px); }
+  80% { transform: translate(-3px, 2px); }
+  100% { transform: none; }
+}
 
 .lock__title { margin: 0; font-size: 23px; font-weight: 800; letter-spacing: -.02em; }
 .lock__subtitle { margin: 6px 0 22px; font-size: 14px; color: var(--ink-2); }
@@ -511,6 +609,16 @@ mark { background: var(--mark-bg); color: inherit; border-radius: 4px; padding: 
   .lock__date { display: none; }
 }
 @media (max-height: 780px) { .lock__clock { display: none; } }
+@media (max-width: 900px) {
+  .lock__stage { flex-direction: column; gap: 4px; }
+  .lockart { width: clamp(120px, 34vw, 190px); }
+  .lock__clock { display: none; }
+}
+@media (max-width: 640px) {
+  .lock { gap: 10px; padding-top: max(58px, env(safe-area-inset-top)); }
+  .lock__hint { display: none; }
+  .key { height: clamp(44px, 6.2vh, 54px); }
+}
 
 /* ==========================================================================
    APP
@@ -665,65 +773,16 @@ body.is-locked .app { visibility: hidden; }
   background-color: transparent;
   transition: background-color .6s var(--ease), border-color .6s var(--ease);
 }
-.companies::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0;
-  background: radial-gradient(70% 55% at 15% 0%, rgba(255, 255, 255, .5), transparent 60%), radial-gradient(50% 40% at 100% 100%, rgba(255, 255, 255, .25), transparent 60%);
-  transition: opacity .6s;
-}
-.companies[data-tint="yellow"] { background-color: var(--yellow); border-top-color: var(--yellow-deep); }
-.companies[data-tint="green"] { background-color: var(--grass); border-top-color: var(--grass-deep); }
-.companies[data-tint]::before { opacity: 1; }
-/* On a bright tint, controls and cards switch to opaque surfaces so contrast holds in both themes. */
-.companies[data-tint] { --card-bg: var(--card-bg-solid); --surface: var(--surface-solid); --surface-hover: var(--surface-solid); }
-.companies[data-tint] .kicker,
-.companies[data-tint] .companies__title,
-.companies[data-tint] .tint__legend { color: var(--tinted-ink); }
-.companies[data-tint] .companies__count { color: rgba(13, 21, 38, .75); }
 
 .companies__head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 20px 28px; margin-bottom: 22px; }
 .kicker { margin: 0 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--icon-accent); }
 .companies__title { margin: 0; font-size: clamp(28px, 3.4vw, 40px); font-weight: 800; letter-spacing: -.035em; line-height: 1.1; }
 .companies__count { margin: 6px 0 0; font-size: 14px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
-/* Tint radios (segmented control with sliding indicator) */
-.tint { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 12px; min-width: 0; margin: 0; padding: 0; border: 0; }
-.tint__legend { float: left; margin-right: 2px; padding: 0; font-size: 13px; font-weight: 600; color: var(--ink-2); }
-.tint__group {
-  position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 15px;
-  background: var(--surface); border: 1px solid var(--line);
-  backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
-  box-shadow: var(--highlight), var(--shadow-sm);
-}
-.tint__indicator {
-  position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 6px); border-radius: 11px;
-  background: linear-gradient(180deg, #ffe766, #f3c200);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 8px 18px -8px rgba(230, 180, 0, .9);
-  opacity: 0; transform: scale(.85);
-  transition: transform .5s var(--ease-spring), opacity .25s, background .35s, box-shadow .35s;
-}
-.tint__group:has(input:checked) .tint__indicator { opacity: 1; transform: none; }
-.tint__group:has(input[value="green"]:checked) .tint__indicator {
-  transform: translateX(calc(100% + 4px));
-  background: linear-gradient(180deg, #92d862, #56a42a);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 8px 18px -8px rgba(80, 160, 40, .9);
-}
-.tint__option {
-  position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  height: 38px; padding: 0 14px 0 10px; border-radius: 11px;
-  font-size: 13.5px; font-weight: 600; white-space: nowrap; color: var(--ink-2);
-  cursor: pointer; user-select: none; transition: color .3s;
-}
-.tint__option:hover { color: var(--ink); }
-.tint__option input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
-.tint__option:has(input:checked) { color: #14200a; }
-.tint__option:has(input:focus-visible) { box-shadow: var(--focus); }
-.tint__swatch { width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .15); transition: transform .45s var(--ease-spring), box-shadow .3s; }
-.tint__swatch--yellow { background: radial-gradient(circle at 35% 30%, #fff3a6, #ffd400 60%, #e0ac00); }
-.tint__swatch--green { background: radial-gradient(circle at 35% 30%, #c8f0a6, #6cc03a 60%, #468f1e); }
-.tint__option:has(input:checked) .tint__swatch { transform: scale(1.15); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .2), 0 0 0 2px rgba(255, 255, 255, .9); }
-.tint__reset { height: 48px; border-radius: 14px; }
-.tint__reset.is-spinning svg { animation: spinBack .65s var(--ease); }
-@keyframes spinBack { to { transform: rotate(-360deg); } }
+/* Color swatches (used by the per-card color radios) */
+.swatch { flex: none; width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .15); transition: transform .45s var(--ease-spring), box-shadow .3s; }
+.swatch--yellow { background: radial-gradient(circle at 35% 30%, #fff3a6, #ffd400 60%, #e0ac00); }
+.swatch--green { background: radial-gradient(circle at 35% 30%, #c8f0a6, #6cc03a 60%, #468f1e); }
 
 /* Toolbar */
 .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 24px; }
@@ -777,15 +836,15 @@ body.is-locked .app { visibility: hidden; }
 /* Grid & cards */
 .grid {
   list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); gap: 16px;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px;
 }
 .card {
   position: relative; isolation: isolate; overflow: hidden;
   display: flex; flex-direction: column; gap: 16px; width: 100%; height: 100%;
-  padding: 20px 20px 18px; border-radius: 20px; text-align: left; color: var(--ink); cursor: pointer;
-  background: var(--card-bg); border: 1px solid var(--line);
+  padding: 20px 20px 16px; border-radius: 20px; color: var(--ink);
+  background-color: transparent; background-image: var(--card-bg); border: 1px solid var(--line);
   box-shadow: var(--highlight), var(--shadow);
-  transition: transform .45s var(--ease), box-shadow .45s var(--ease), border-color .45s var(--ease);
+  transition: transform .45s var(--ease), box-shadow .45s var(--ease), border-color .45s var(--ease), background-color .45s var(--ease);
   animation: cardIn .7s var(--ease) both;
 }
 @keyframes cardIn { from { opacity: 0; transform: translateY(18px) scale(.98); } to { opacity: 1; transform: none; } }
@@ -804,9 +863,29 @@ body.is-locked .app { visibility: hidden; }
   opacity: 0; transition: opacity .45s;
 }
 .card:hover { transform: translateY(-6px); border-color: transparent; box-shadow: var(--highlight), var(--shadow-hover); }
-.card:hover::before, .card:hover::after, .card:focus-visible::before { opacity: 1; }
-.card:active { transform: translateY(-2px) scale(.995); }
-.card:focus-visible { box-shadow: var(--focus), var(--shadow-hover); }
+.card:hover::before, .card:hover::after, .card:has(.card__open:focus-visible)::before { opacity: 1; }
+.card:has(.card__open:active) { transform: translateY(-2px) scale(.995); }
+.card:has(.card__open:focus-visible) { box-shadow: var(--focus), var(--shadow-hover); }
+
+/* Invisible full-card button that opens the details; the color controls sit above it. */
+.card__open {
+  position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; padding: 0;
+  border: 0; border-radius: inherit; background: transparent; cursor: pointer;
+}
+.card__open:focus-visible { box-shadow: none; }
+
+/* A colored card switches to dark ink so it stays readable in both themes. */
+.card[data-tint] {
+  --ink: #0d1526; --ink-2: #2f3b52; --ink-3: #4b5870;
+  --line: rgba(13, 21, 38, .14); --line-strong: rgba(13, 21, 38, .26);
+  --icon-accent: #1747b8; --surface-sunken: rgba(255, 255, 255, .5); --surface-hover: rgba(255, 255, 255, .85);
+  --accent-soft: rgba(255, 255, 255, .45); --mark-bg: rgba(255, 255, 255, .7);
+  --highlight: inset 0 1px 0 rgba(255, 255, 255, .55);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0) 55%);
+}
+.card[data-tint="yellow"] { background-color: var(--yellow); border-color: var(--yellow-deep); }
+.card[data-tint="green"] { background-color: var(--grass); border-color: var(--grass-deep); }
+.card[data-tint]:hover { border-color: transparent; }
 
 .card__top { display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
 .card .logo-tile { transition: transform .5s var(--ease-spring); }
@@ -840,6 +919,38 @@ body.is-locked .app { visibility: hidden; }
 .card__fact dt svg { flex: none; color: var(--icon-accent); }
 .card__fact dd { margin: 4px 0 0; font-size: 15px; font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card__fact dd.is-empty { color: var(--ink-3); font-weight: 500; opacity: .6; }
+
+/* Per-card color radios + reset */
+.card-tint {
+  position: relative; z-index: 2; display: flex; align-items: center; gap: 8px;
+  min-width: 0; margin: 0; padding: 12px 0 0; border: 0;
+  background: linear-gradient(90deg, transparent, var(--line-strong) 20%, var(--line-strong) 80%, transparent) top / 100% 1px no-repeat;
+}
+.card-tint__group { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.card-tint__option {
+  position: relative; display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 11px 0 7px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface-sunken); color: var(--ink-2);
+  font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; user-select: none;
+  transition: background-color .25s, border-color .25s, color .25s, box-shadow .25s, transform .15s var(--ease);
+}
+.card-tint__option:hover { border-color: var(--line-strong); color: var(--ink); }
+.card-tint__option:active { transform: scale(.96); }
+.card-tint__option input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.card-tint__option:has(input:checked) {
+  background: rgba(255, 255, 255, .94); border-color: rgba(13, 21, 38, .3); color: #0d1526;
+  box-shadow: 0 6px 14px -8px rgba(13, 21, 38, .55);
+}
+.card-tint__option:has(input:focus-visible) { box-shadow: var(--focus); }
+.card-tint__option .swatch { width: 14px; height: 14px; }
+.card-tint__option:has(input:checked) .swatch { transform: scale(1.15); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .2), 0 0 0 2px #fff; }
+.card-tint__reset {
+  flex: none; display: grid; place-items: center; width: 30px; height: 30px; margin-left: auto;
+  border-radius: 50%; border: 1px solid var(--line); background: var(--surface-sunken); color: var(--ink-2); cursor: pointer;
+  transition: background-color .25s, border-color .25s, color .25s, opacity .25s;
+}
+.card-tint__reset:hover:not([aria-disabled="true"]) { background: var(--surface-hover); border-color: var(--line-strong); color: var(--ink); }
+.card-tint__reset[aria-disabled="true"] { opacity: .4; cursor: not-allowed; }
 
 /* States */
 .empty {
@@ -1109,12 +1220,6 @@ body.is-locked .app { visibility: hidden; }
   #relock { width: 42px; padding: 0; }
 
   .companies__head { align-items: stretch; flex-direction: column; }
-  .tint { justify-content: space-between; }
-  .tint__legend { float: none; width: 100%; margin-bottom: 2px; }
-  .tint__group { flex: 1; }
-  .tint__option { padding: 0 8px; gap: 7px; }
-  .tint__reset { flex: none; width: 48px; padding: 0; }
-  .tint__reset-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .select { flex: 1 1 100%; }
   .toggle { flex: 1 1 auto; }
   .search__kbd { display: none; }
