@@ -1,0 +1,6 @@
+# Only public/ is deployed; keep the scraper and docs out of the build.
+scraper/
+README.md
+.venv/
+__pycache__/
+*.log
