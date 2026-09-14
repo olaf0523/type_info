@@ -161,9 +161,9 @@
   const art = $("#lockart");
   const SLOT_X = [116, 158, 200, 242, 284];
   const SLOT_Y = [392, 424, 456];
-  const SEAL_DELAY = 900;
   const artSlots = [];
-  const sealTimers = [];
+  // Digits are kept in memory only; they are put into the SVG solely while "Show" is on.
+  const slotDigits = [];
 
   (function buildLockArt() {
     const svgNS = "http://www.w3.org/2000/svg";
@@ -183,24 +183,24 @@
 
   function renderArt(value) {
     const len = value.length;
+    const revealed = art.classList.contains("is-revealed");
     let wrote = 0;
     artSlots.forEach((slot, i) => {
       const digit = slot.querySelector("text");
       if (i < len) {
-        if (!slot.classList.contains("is-filled") || digit.textContent !== value[i]) {
-          digit.textContent = value[i];
-          // Several digits at once (paste) are engraved one after another.
+        if (slotDigits[i] !== value[i]) {
+          slotDigits[i] = value[i];
+          digit.textContent = revealed ? value[i] : "";
+          // Several entries at once (paste) are engraved one after another.
           slot.style.setProperty("--w-delay", `${wrote * 70}ms`);
-          slot.classList.remove("is-writing", "is-sealed");
+          slot.classList.remove("is-writing");
           slot.getBoundingClientRect();
           slot.classList.add("is-filled", "is-writing");
-          clearTimeout(sealTimers[i]);
-          sealTimers[i] = setTimeout(() => slot.classList.add("is-sealed"), SEAL_DELAY + wrote * 70);
           wrote++;
         }
-      } else if (slot.classList.contains("is-filled")) {
-        clearTimeout(sealTimers[i]);
-        slot.classList.remove("is-filled", "is-writing", "is-sealed");
+      } else if (slotDigits[i] !== undefined) {
+        slotDigits[i] = undefined;
+        slot.classList.remove("is-filled", "is-writing");
         digit.textContent = "";
       }
       slot.classList.toggle("is-next", i === len);
@@ -216,6 +216,13 @@
     art.style.setProperty("--dial", `${len * 24}deg`);
     art.style.setProperty("--p", (len / PIN_LENGTH).toFixed(3));
     art.classList.toggle("is-complete", len === PIN_LENGTH);
+  }
+
+  function setArtRevealed(on) {
+    art.classList.toggle("is-revealed", on);
+    artSlots.forEach((slot, i) => {
+      slot.querySelector("text").textContent = on && slotDigits[i] !== undefined ? slotDigits[i] : "";
+    });
   }
 
   let attempts = 0;
@@ -395,7 +402,7 @@
   revealBtn.addEventListener("click", () => {
     const on = !pin.classList.contains("is-revealed");
     pin.classList.toggle("is-revealed", on);
-    art.classList.toggle("is-revealed", on);
+    setArtRevealed(on);
     revealBtn.setAttribute("aria-pressed", String(on));
     revealBtn.querySelector("span").textContent = on ? "Hide" : "Show";
   });

@@ -472,18 +472,27 @@ mark { background: var(--mark-bg); color: inherit; border-radius: 4px; padding: 
   fill: #fff3cf; fill-opacity: 0; stroke: #ffd86b; stroke-width: .9; paint-order: stroke;
   stroke-dasharray: 64; stroke-dashoffset: 64; opacity: 0; transition: opacity .3s;
 }
-.lockart__slot.is-filled .lockart__digit { opacity: 1; fill-opacity: 1; stroke-dashoffset: 0; }
-.lockart__slot.is-writing .lockart__digit { animation: engrave .6s var(--ease) var(--w-delay, 0ms) both; }
+.lockart__slot.is-filled .lockart__digit { fill-opacity: 1; stroke-dashoffset: 0; }
+/* Digits are drawn only while "Show" is on; otherwise every entry is engraved as a gold gem. */
+.lockart.is-revealed .lockart__slot.is-filled .lockart__digit { opacity: 1; }
+.lockart.is-revealed .lockart__slot.is-writing .lockart__digit { animation: engrave .6s var(--ease) var(--w-delay, 0ms) both; }
 @keyframes engrave {
   0% { stroke-dashoffset: 64; fill-opacity: 0; }
   65% { stroke-dashoffset: 0; fill-opacity: 0; }
   100% { stroke-dashoffset: 0; fill-opacity: 1; }
 }
-/* After writing, a digit is sealed behind a gold gem unless "Show" is on. */
-.lockart__slot.is-sealed .lockart__digit { opacity: 0; }
-.lockart.is-revealed .lockart__slot.is-sealed .lockart__digit { opacity: 1; }
-.lockart__gem { fill: url(#lk-gold); opacity: 0; transform-box: fill-box; transform-origin: center; transform: scale(.2) rotate(-45deg); transition: opacity .35s, transform .5s var(--ease-spring); filter: url(#lk-glow); }
-.lockart__slot.is-sealed .lockart__gem { opacity: 1; transform: none; }
+.lockart__gem {
+  fill: url(#lk-gold); opacity: 0; transform-box: fill-box; transform-origin: center; transform: scale(.2) rotate(-45deg);
+  transition: opacity .25s, transform .5s var(--ease-spring); filter: url(#lk-glow);
+}
+.lockart__slot.is-filled .lockart__gem { opacity: 1; transform: none; }
+/* Only transform is animated, so the opacity rules above stay in charge when "Show" toggles. */
+.lockart__slot.is-writing .lockart__gem { animation: gemIn .55s var(--ease-spring) var(--w-delay, 0ms) both; }
+@keyframes gemIn {
+  0% { transform: scale(.2) rotate(-90deg); }
+  60% { transform: scale(1.3) rotate(8deg); }
+  100% { transform: none; }
+}
 .lockart.is-revealed .lockart__slot .lockart__gem { opacity: 0; }
 .lockart__spark { fill: #fff; opacity: 0; filter: url(#lk-glow); }
 .lockart__slot.is-writing .lockart__spark { animation: spark .6s var(--ease) var(--w-delay, 0ms) both; }
