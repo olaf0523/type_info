@@ -897,6 +897,54 @@
   const tabs = $$('#modal [role="tab"]');
   let modalPos = -1;
   let returnFocus = null;
+  const modalFx = $("#modal-fx");
+  let openFxTimer = 0;
+  const SPARK_COLORS = ["#ffe08a", "#ffd166", "#62b6ff", "#9ad0ff", "#ffffff", "#8b7bff"];
+
+  // Where the dialog launches from (and returns to): the card, or the screen centre.
+  // Offsets are layout-based so a running animation doesn't skew the measurement.
+  function setLaunchOrigin(source) {
+    const mx = modal.offsetLeft + modal.offsetWidth / 2;
+    const my = modal.offsetTop + modal.offsetHeight / 2;
+    const el = source?.isConnected ? (source.closest(".card") || source) : null;
+    const r = el?.getBoundingClientRect();
+    const visible = r && r.width > 0 && r.bottom > 0 && r.top < innerHeight;
+    const fx = visible ? r.left + r.width / 2 : innerWidth / 2;
+    const fy = visible ? r.top + r.height / 2 : innerHeight / 2;
+    const scale = visible ? Math.min(.6, Math.max(.15, r.width / modal.offsetWidth)) : .6;
+    modal.style.setProperty("--from-x", `${(fx - mx).toFixed(1)}px`);
+    modal.style.setProperty("--from-y", `${(fy - my).toFixed(1)}px`);
+    modal.style.setProperty("--from-scale", scale.toFixed(3));
+  }
+
+  function playOpenEffects(source) {
+    setLaunchOrigin(source);
+    clearTimeout(openFxTimer);
+    modal.classList.remove("is-opening");
+    void modal.offsetWidth;
+    if (reducedMotion.matches) { modalFx.replaceChildren(); return; }
+
+    // Measured before the launch animation starts, so the rect is untransformed.
+    const panel = modal.getBoundingClientRect();
+    const logo = $("#modal-avatar").getBoundingClientRect();
+    const cx = (logo.left + logo.width / 2 - panel.left).toFixed(1);
+    const cy = (logo.top + logo.height / 2 - panel.top).toFixed(1);
+    const parts = [
+      `<span class="modal__burst" style="left:${cx}px;top:${cy}px"></span>`,
+      `<span class="modal__ring" style="left:${cx}px;top:${cy}px"></span>`,
+    ];
+    for (let i = 0; i < 18; i++) {
+      const angle = (i / 18) * Math.PI * 2 + Math.random() * .35;
+      const dist = 80 + Math.random() * 160;
+      parts.push(`<span class="modal__spark" style="left:${cx}px;top:${cy}px;--tx:${(Math.cos(angle) * dist).toFixed(1)}px;--ty:${(Math.sin(angle) * dist).toFixed(1)}px;--s:${(3 + Math.random() * 4).toFixed(1)}px;--c:${SPARK_COLORS[i % SPARK_COLORS.length]};--dur:${(.75 + Math.random() * .5).toFixed(2)}s;--delay:${(.14 + Math.random() * .16).toFixed(2)}s"></span>`);
+    }
+    modalFx.innerHTML = parts.join("");
+    modal.classList.add("is-opening");
+    openFxTimer = setTimeout(() => {
+      modal.classList.remove("is-opening");
+      modalFx.replaceChildren();
+    }, 1800);
+  }
 
   function factRow(iconName, label, value, { href, copy = true } = {}) {
     const has = Boolean(value);
@@ -988,6 +1036,7 @@
       factRow("globe", "Webサイト", c.website, { href: c.website }),
       factRow("link", "type.jp プロフィール", c.typeUrl, { href: c.typeUrl }),
     ].join("");
+    $$(".fact", modalFacts).forEach((row, i) => row.style.setProperty("--i", i));
     renderRelated(c);
     modalBody.scrollTop = 0;
 
@@ -1005,7 +1054,10 @@
   function swapAnimation(delta) {
     if (reducedMotion.matches) return;
     modal.style.setProperty("--swap-from", `${delta < 0 ? -16 : 16}px`);
-    modal.classList.remove("is-swapping");
+    // Navigating mid-entrance: let the slide take over from the opening choreography.
+    clearTimeout(openFxTimer);
+    modal.classList.remove("is-opening", "is-swapping");
+    modalFx.replaceChildren();
     void modal.offsetWidth;
     modal.classList.add("is-swapping");
   }
@@ -1018,8 +1070,11 @@
     setTab("info");
     fillModal(pos);
     modal.classList.remove("is-closing", "is-swapping");
-    if (!modal.open) modal.showModal();
-    $("#modal-close").focus();
+    if (!modal.open) {
+      modal.showModal();
+      playOpenEffects(trigger);
+    }
+    $("#modal-close").focus({ preventScroll: true });
   }
 
   function closeModal(immediate = false) {
@@ -1029,9 +1084,16 @@
       modal.close();
       if (returnFocus && document.contains(returnFocus) && !immediate) returnFocus.focus({ preventScroll: true });
     };
-    if (immediate || reducedMotion.matches) return finish();
+    clearTimeout(openFxTimer);
+    modalFx.replaceChildren();
+    if (immediate || reducedMotion.matches) {
+      modal.classList.remove("is-opening");
+      return finish();
+    }
+    setLaunchOrigin(returnFocus);
+    modal.classList.remove("is-opening");
     modal.classList.add("is-closing");
-    setTimeout(finish, 190);
+    setTimeout(finish, 300);
   }
 
   function step(delta) {

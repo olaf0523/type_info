@@ -1048,12 +1048,65 @@ body.is-locked .app { visibility: hidden; }
     radial-gradient(70% 60% at 40% -10%, rgba(44, 88, 190, .60), transparent 70%),
     linear-gradient(180deg, rgba(5, 12, 30, .82), rgba(3, 8, 22, .90));
 }
-.modal[open] { display: flex; flex-direction: column; animation: modalIn .45s var(--ease) both; }
-.modal[open]::backdrop { animation: fadeIn .35s ease both; }
-.modal.is-closing { animation: modalOut .2s ease both; }
-.modal.is-closing::backdrop { animation: fadeOut .2s ease both; }
-@keyframes modalIn { from { opacity: 0; transform: translateY(24px) scale(.95); } to { opacity: 1; transform: none; } }
-@keyframes modalOut { to { opacity: 0; transform: translateY(10px) scale(.98); } }
+.modal[open] { display: flex; flex-direction: column; }
+
+/* Opening: the dialog launches from the card that was clicked (--from-*), overshoots and settles with a glow. */
+.modal.is-opening { animation: modalLaunch .8s var(--ease) both; }
+@keyframes modalLaunch {
+  0% { opacity: 0; transform: translate(var(--from-x, 0px), var(--from-y, 40px)) scale(var(--from-scale, .6)); box-shadow: var(--m-shadow), 0 0 0 0 rgba(94, 176, 255, 0); }
+  45% { opacity: 1; box-shadow: var(--m-shadow), 0 0 90px 18px rgba(94, 176, 255, .45); }
+  70% { transform: translate(0, 0) scale(1.018); }
+  100% { opacity: 1; transform: none; box-shadow: var(--m-shadow), 0 0 0 0 rgba(94, 176, 255, 0); }
+}
+.modal.is-opening::backdrop { animation: backdropIn .7s ease both; }
+@keyframes backdropIn { from { opacity: 0; backdrop-filter: blur(0) saturate(100%); -webkit-backdrop-filter: blur(0) saturate(100%); } }
+
+/* Closing: shrink back into the card it came from. */
+.modal.is-closing { animation: modalClose .3s cubic-bezier(.4, 0, .8, .3) both; }
+.modal.is-closing::backdrop { animation: fadeOut .3s ease both; }
+@keyframes modalClose { to { opacity: 0; transform: translate(var(--from-x, 0px), var(--from-y, 20px)) scale(var(--from-scale, .9)); } }
+
+/* A band of light runs once around the border, and a sheen sweeps the panel. */
+.modal.is-opening::after {
+  content: ""; position: absolute; inset: 0; z-index: 7; border-radius: inherit; padding: 2px; pointer-events: none;
+  background: conic-gradient(from var(--angle), transparent 0 58%, var(--accent-2) 72%, #ffe08a 80%, #fff 83%, transparent 92%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: borderRun 1.3s var(--ease) .1s both;
+}
+@keyframes borderRun { 0% { --angle: 0deg; opacity: 0; } 15% { opacity: 1; } 80% { opacity: 1; } 100% { --angle: 360deg; opacity: 0; } }
+.modal.is-opening::before {
+  content: ""; position: absolute; inset: 0; z-index: 7; pointer-events: none;
+  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, .22) 50%, transparent 62%) no-repeat;
+  background-size: 250% 100%;
+  animation: panelSheen 1.1s var(--ease) .35s both;
+}
+@keyframes panelSheen { from { background-position: 150% 0; } to { background-position: -60% 0; } }
+
+/* Burst, ring and sparks spawned around the logo tile */
+.modal__fx { position: absolute; inset: 0; z-index: 6; overflow: hidden; border-radius: inherit; pointer-events: none; }
+.modal__burst {
+  position: absolute; width: 260px; height: 260px; margin: -130px 0 0 -130px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 228, 150, .6) 0%, rgba(94, 176, 255, .35) 35%, transparent 70%);
+  opacity: 0; animation: burstGlow 1s var(--ease) .12s both;
+}
+@keyframes burstGlow { 0% { opacity: 0; transform: scale(.2); } 30% { opacity: 1; } 100% { opacity: 0; transform: scale(2.6); } }
+.modal__ring {
+  position: absolute; width: 110px; height: 110px; margin: -55px 0 0 -55px; border-radius: 50%;
+  border: 2px solid rgba(255, 224, 138, .85); box-shadow: 0 0 18px rgba(255, 224, 138, .6);
+  opacity: 0; animation: ringOut 1s var(--ease) .18s both;
+}
+@keyframes ringOut { 0% { opacity: .95; transform: scale(.3); } 100% { opacity: 0; transform: scale(3.2); } }
+.modal__spark {
+  position: absolute; width: var(--s); height: var(--s); margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2); border-radius: 50%;
+  background: var(--c); box-shadow: 0 0 10px 2px var(--c);
+  opacity: 0; animation: sparkFly var(--dur) cubic-bezier(.15, .7, .3, 1) var(--delay) both;
+}
+@keyframes sparkFly {
+  0% { opacity: 0; transform: translate(0, 0) scale(.3); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(1); }
+}
 @keyframes fadeIn { from { opacity: 0; } }
 @keyframes fadeOut { to { opacity: 0; } }
 
@@ -1061,12 +1114,35 @@ body.is-locked .app { visibility: hidden; }
 .modal svg { flex: none; }
 .modal__panel { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 
-/* Staggered entrance of the modal contents */
-.modal[open] .modal__head, .modal[open] .modal__tabs, .modal[open] .modal__body, .modal[open] .modal__foot { animation: rise .55s var(--ease) both; }
-.modal[open] .modal__tabs { animation-delay: .05s; }
-.modal[open] .modal__body { animation-delay: .1s; }
-.modal[open] .modal__foot { animation-delay: .15s; }
-@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+/* Choreographed entrance of the modal contents (only while .is-opening) */
+@keyframes blurUp { from { opacity: 0; transform: translateY(14px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+.modal.is-opening .modal__logo { animation: logoPop .85s var(--ease-spring) .14s both; }
+@keyframes logoPop {
+  0% { opacity: 0; transform: scale(.3) rotate(-28deg); }
+  60% { opacity: 1; transform: scale(1.14) rotate(6deg); }
+  100% { opacity: 1; transform: none; }
+}
+.modal.is-opening .modal__eyebrow { animation: blurUp .6s var(--ease) .22s both; }
+.modal.is-opening .modal__name { animation: nameReveal .8s var(--ease) .28s both; }
+@keyframes nameReveal {
+  from { opacity: 0; transform: translateY(8px); filter: blur(10px); clip-path: inset(0 100% 0 0); }
+  to { opacity: 1; transform: none; filter: none; clip-path: inset(0 0 0 0); }
+}
+.modal.is-opening .modal__site { animation: blurUp .6s var(--ease) .4s both; }
+.modal.is-opening .modal__close { animation: closeSpin .7s var(--ease-spring) .32s both; }
+@keyframes closeSpin { from { opacity: 0; transform: scale(.4) rotate(-120deg); } to { opacity: 1; transform: none; } }
+.modal.is-opening .modal__tabs { animation: blurUp .55s var(--ease) .36s both; }
+.modal.is-opening .modal__tab[aria-selected="true"]::after { animation: underlineGrow .7s var(--ease) .55s both; }
+@keyframes underlineGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.modal.is-opening .facts { animation: blurUp .55s var(--ease) .4s both; }
+.modal.is-opening .fact { animation: factIn .6s var(--ease) calc(.46s + var(--i, 0) * 60ms) both; }
+@keyframes factIn { from { opacity: 0; transform: translateX(-20px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+.modal.is-opening .fact__icon { animation: iconPop .65s var(--ease-spring) calc(.54s + var(--i, 0) * 60ms) both; }
+@keyframes iconPop { from { opacity: 0; transform: scale(.2) rotate(-40deg); } to { opacity: 1; transform: none; } }
+.modal.is-opening .modal__nav { animation: blurUp .55s var(--ease) .78s both; }
+.modal.is-opening .modal__actions { animation: blurUp .55s var(--ease) .86s both; }
+.modal.is-opening .mbtn--primary::after { animation: btnShine 1s var(--ease) 1.15s both; }
+@keyframes btnShine { from { left: -60%; } to { left: 130%; } }
 .modal.is-swapping .modal__head, .modal.is-swapping .facts, .modal.is-swapping .related { animation: swapIn .4s var(--ease) both; }
 @keyframes swapIn { from { opacity: 0; transform: translateX(var(--swap-from, 14px)); } to { opacity: 1; transform: none; } }
 
@@ -1235,8 +1311,8 @@ body.is-locked .app { visibility: hidden; }
   .card { padding: 18px; }
 
   .modal { width: 100%; max-height: 94%; margin: auto 0 0; border-radius: 24px 24px 0 0; border-bottom: 0; }
-  .modal[open] { animation-name: sheetIn; }
-  .modal.is-closing { animation-name: sheetOut; }
+  .modal.is-opening { animation: sheetIn .6s var(--ease) both; }
+  .modal.is-closing { animation: sheetOut .3s var(--ease) both; }
   .modal__head { gap: 14px; padding: 20px 18px 0; }
   .modal__logo { width: 60px; height: 60px; border-radius: 16px; font-size: 28px; }
   .modal__heading { padding-top: 0; }
