@@ -5,6 +5,7 @@
   // SHA-256 of the access code (the code itself is not stored in the page).
   const PIN_HASH = "7631ea876468c855728dd063ffff91c185bff5499cb4acf2ec7900b5b3f9dd54";
   const SESSION_KEY = "kaisha-index:unlocked";
+  const THEME_KEY = "kaisha-index:theme";
   const MAX_ATTEMPTS = 5;
   const COOLDOWN_SECONDS = 30;
   const BATCH = 60;
@@ -12,11 +13,65 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-  const store = {
-    get(key) { try { return sessionStorage.getItem(key); } catch { return null; } },
-    set(key, val) { try { sessionStorage.setItem(key, val); } catch { /* ignore */ } },
-    remove(key) { try { sessionStorage.removeItem(key); } catch { /* ignore */ } },
-  };
+  const storage = (area) => ({
+    get(key) { try { return area().getItem(key); } catch { return null; } },
+    set(key, val) { try { area().setItem(key, val); } catch { /* ignore */ } },
+    remove(key) { try { area().removeItem(key); } catch { /* ignore */ } },
+  });
+  const store = storage(() => sessionStorage);
+  const local = storage(() => localStorage);
+
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+
+  /* ======================================================================
+     THEME (dark / light)
+     ====================================================================== */
+  const root = document.documentElement;
+  const themeToggles = $$("[data-theme-toggle]");
+  const themeMeta = $('meta[name="theme-color"]');
+  const systemDark = matchMedia("(prefers-color-scheme: dark)");
+
+  const currentTheme = () => (root.dataset.theme === "light" ? "light" : "dark");
+
+  function applyTheme(theme) {
+    root.dataset.theme = theme;
+    const next = theme === "dark" ? "light" : "dark";
+    themeToggles.forEach((btn) => {
+      btn.setAttribute("aria-label", `Switch to ${next} mode`);
+      btn.title = `Switch to ${next} mode`;
+    });
+    themeMeta?.setAttribute("content", theme === "dark" ? "#040a1a" : "#eaf1fc");
+  }
+
+  function setTheme(theme, origin) {
+    local.set(THEME_KEY, theme);
+    if (!document.startViewTransition || reducedMotion.matches || !origin) {
+      root.classList.add("theme-anim");
+      applyTheme(theme);
+      setTimeout(() => root.classList.remove("theme-anim"), 600);
+      return;
+    }
+    // Circular reveal that grows out of the toggle button.
+    const rect = origin.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const radius = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    const transition = document.startViewTransition(() => applyTheme(theme));
+    transition.ready.then(() => {
+      root.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+        { duration: 700, easing: "cubic-bezier(.2, .8, .2, 1)", pseudoElement: "::view-transition-new(root)" },
+      );
+    }).catch(() => { /* transition skipped */ });
+  }
+
+  themeToggles.forEach((btn) => btn.addEventListener("click", () => {
+    setTheme(currentTheme() === "dark" ? "light" : "dark", btn);
+  }));
+  systemDark.addEventListener("change", (e) => {
+    if (!local.get(THEME_KEY)) applyTheme(e.matches ? "dark" : "light");
+  });
+  applyTheme(currentTheme());
 
   /* ======================================================================
      SHA-256 (sync, works on file:// where crypto.subtle is unavailable)
@@ -64,6 +119,29 @@
     }
     return H.map((x) => (x >>> 0).toString(16).padStart(8, "0")).join("");
   }
+
+  /* ======================================================================
+     ICONS
+     ====================================================================== */
+  const ICONS = {
+    building: '<path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h2a2 2 0 0 1 2 2v10M2 21h20M8 7h4M8 11h4M8 15h4"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+    yen: '<path d="m6 3 6 8 6-8M12 11v10M7 12h10M7 16h10"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+    link: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/>',
+    external: '<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    pin: '<path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+    news: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/>',
+    layers: '<path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/>',
+    chevron: '<path d="m9 18 6-6-6-6"/>',
+    arrowUpRight: '<path d="M7 17 17 7M8 7h9v9"/>',
+  };
+  const icon = (name, size = 18) =>
+    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
   /* ======================================================================
      LOCK SCREEN
@@ -196,9 +274,9 @@
     lock.classList.add("is-unlocked");
     document.body.classList.remove("is-locked");
     app.inert = false;
-    app.classList.add("is-entering");
-    setTimeout(() => app.classList.remove("is-entering"), 1000);
     pinInput.blur();
+    // Let the lock screen start fading before the page content animates in.
+    setTimeout(startReveals, lock.classList.contains("is-instant") ? 0 : 280);
     loadData();
   }
 
@@ -210,7 +288,7 @@
     renderPin();
     app.inert = true;
     document.body.classList.add("is-locked");
-    lock.classList.remove("is-unlocked");
+    lock.classList.remove("is-unlocked", "is-instant");
     setTimeout(() => pinInput.focus({ preventScroll: true }), 50);
   }
 
@@ -260,6 +338,29 @@
   }
   tickClock();
   setInterval(tickClock, 1000);
+
+  /* ======================================================================
+     REVEAL ON SCROLL
+     ====================================================================== */
+  let revealObserver = null;
+  function startReveals() {
+    if (revealObserver) return;
+    const targets = $$("[data-reveal]", app);
+    if (!("IntersectionObserver" in window) || reducedMotion.matches) {
+      targets.forEach((el) => el.classList.add("is-in"));
+      runStats();
+      return;
+    }
+    revealObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-in");
+        revealObserver.unobserve(entry.target);
+        if (entry.target.id === "stats") runStats();
+      });
+    }, { rootMargin: "0px 0px -6% 0px", threshold: 0.06 });
+    targets.forEach((el) => revealObserver.observe(el));
+  }
 
   /* ======================================================================
      DATA
@@ -323,6 +424,17 @@
     return ch.toUpperCase();
   }
 
+  // Name without 【…】/(…) annotations, used for external searches.
+  function baseNameOf(name) {
+    return nfkc(name).replace(/【.*?】|\[.*?\]|\(.*?\)/g, " ").replace(/\s+/g, " ").trim() || name;
+  }
+
+  // Groups listings of the same company (branches, departments, registration pages).
+  function groupKeyOf(name) {
+    const core = baseNameOf(name).replace(LEGAL_FORMS, " ").trim().split(" ")[0] || "";
+    return core.length >= 2 ? core.toLowerCase() : "";
+  }
+
   function hueOf(str) {
     let h = 0;
     for (const c of str) h = (h * 31 + c.codePointAt(0)) >>> 0;
@@ -370,7 +482,10 @@
       employeeCount: parseEmployees(raw.employees),
       capitalYen: parseCapital(raw.capital),
       initial: initialOf(name),
-      hue: hueOf(name),
+      // Logo tiles stay within the blue–indigo range of the modal design.
+      tileHue: 205 + (hueOf(name) % 45),
+      groupKey: groupKeyOf(name),
+      searchName: baseNameOf(name),
       haystack: nfkc(`${name} ${raw.representative} ${hostOf(website)}`).toLowerCase(),
     };
   }
@@ -389,6 +504,7 @@
   const sentinel = $("#sentinel");
 
   let companies = [];
+  let related = new Map();
   let view = [];
   let rendered = 0;
   let query = "";
@@ -406,6 +522,9 @@
     if (at < 0) return safe;
     return escapeHtml(text.slice(0, at)) + "<mark>" + escapeHtml(text.slice(at, at + query.length)) + "</mark>" + escapeHtml(text.slice(at + query.length));
   }
+
+  const logoTile = (c, extraClass = "") =>
+    `<span class="logo-tile ${extraClass}" style="--h:${c.tileHue}" aria-hidden="true"><span>${escapeHtml(c.initial)}</span></span>`;
 
   const collator = new Intl.Collator("ja", { numeric: true, sensitivity: "base" });
   const nullsLast = (a, b, cmp) => (a == null) - (b == null) || (a == null ? 0 : cmp(a, b));
@@ -436,8 +555,12 @@
     emptyState.hidden = view.length > 0 || !dataLoaded;
   }
 
-  function cardFact(label, value) {
-    return `<div class="card__fact"><dt>${label}</dt><dd class="${value ? "" : "is-empty"}">${value ? escapeHtml(value) : "—"}</dd></div>`;
+  function cardFact(iconName, label, value) {
+    return `
+      <div class="card__fact">
+        <dt>${icon(iconName, 12)}${label}</dt>
+        <dd class="${value ? "" : "is-empty"}">${value ? escapeHtml(value) : "—"}</dd>
+      </div>`;
   }
 
   function renderMore() {
@@ -445,22 +568,23 @@
     const frag = document.createDocumentFragment();
     slice.forEach((c, i) => {
       const li = document.createElement("li");
+      const sub = c.host
+        ? `${icon("globe", 13)}<span>${highlight(c.host)}</span>`
+        : c.representative ? `${icon("user", 13)}<span>${highlight(c.representative)}</span>` : "&nbsp;";
       li.innerHTML = `
-        <button class="card" type="button" data-pos="${rendered + i}" style="animation-delay:${Math.min(i, 20) * 18}ms">
+        <button class="card" type="button" data-pos="${rendered + i}" style="animation-delay:${Math.min(i, 20) * 30}ms">
           <div class="card__top">
-            <span class="avatar" style="--h:${c.hue}" aria-hidden="true">${escapeHtml(c.initial)}</span>
+            ${logoTile(c)}
             <div class="card__title">
               <h3 class="card__name">${highlight(c.name)}</h3>
-              <p class="card__host">${c.host ? highlight(c.host) : c.representative ? highlight(c.representative) : "&nbsp;"}</p>
+              <p class="card__host">${sub}</p>
             </div>
-            <span class="card__arrow" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M8 7h9v9"/></svg>
-            </span>
+            <span class="card__arrow" aria-hidden="true">${icon("arrowUpRight", 16)}</span>
           </div>
           <dl class="card__facts">
-            ${cardFact("Founded", c.year ? String(c.year) : "")}
-            ${cardFact("Staff", formatEmployees(c.employeeCount))}
-            ${cardFact("Capital", formatCapital(c.capitalYen))}
+            ${cardFact("calendar", "Founded", c.year ? String(c.year) : "")}
+            ${cardFact("users", "Staff", formatEmployees(c.employeeCount))}
+            ${cardFact("yen", "Capital", formatCapital(c.capitalYen))}
           </dl>
         </button>`;
       frag.append(li);
@@ -476,6 +600,20 @@
   grid.addEventListener("click", (e) => {
     const card = e.target.closest(".card");
     if (card) openModal(+card.dataset.pos, card);
+  });
+
+  // Spotlight that follows the pointer across a card.
+  let spotFrame = 0;
+  grid.addEventListener("pointermove", (e) => {
+    const card = e.target.closest(".card");
+    if (!card || spotFrame) return;
+    const { clientX, clientY } = e;
+    spotFrame = requestAnimationFrame(() => {
+      spotFrame = 0;
+      const r = card.getBoundingClientRect();
+      card.style.setProperty("--mx", `${clientX - r.left}px`);
+      card.style.setProperty("--my", `${clientY - r.top}px`);
+    });
   });
 
   let searchTimer;
@@ -500,22 +638,82 @@
     searchInput.focus();
   });
 
+  /* ---------- Stats (count-up once visible) ---------- */
+  let statTargets = null;
+  let statsRan = false;
+
+  function countUp(el, to, { from = 0, duration = 1500, format = (n) => fmtInt.format(Math.round(n)), suffix = "" } = {}) {
+    if (reducedMotion.matches) { el.textContent = format(to) + suffix; return; }
+    const start = performance.now();
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 4);
+      el.textContent = format(from + (to - from) * eased) + suffix;
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
   function updateStats() {
     const years = companies.map((c) => c.year).filter(Boolean).sort((a, b) => a - b);
     const withWeb = companies.filter((c) => c.website).length;
-    $("#stat-total").textContent = fmtInt.format(companies.length);
-    $("#stat-web").textContent = companies.length ? `${Math.round((withWeb / companies.length) * 100)}%` : "—";
-    $("#stat-year").textContent = years.length ? years[Math.floor(years.length / 2)] : "—";
-    $("#stat-oldest").textContent = years.length ? years[0] : "—";
+    statTargets = {
+      total: companies.length,
+      web: companies.length ? Math.round((withWeb / companies.length) * 100) : 0,
+      median: years.length ? years[Math.floor(years.length / 2)] : null,
+      oldest: years.length ? years[0] : null,
+    };
+    runStats();
   }
+
+  function runStats() {
+    const statsEl = $("#stats");
+    if (!statTargets || statsRan || !statsEl.classList.contains("is-in")) return;
+    statsRan = true;
+    const year = (n) => String(Math.round(n));
+    countUp($("#stat-total"), statTargets.total);
+    countUp($("#orbit-count"), statTargets.total, { duration: 1800 });
+    countUp($("#stat-web"), statTargets.web, { suffix: "%" });
+    $("#stat-web-bar").style.setProperty("--p", `${statTargets.web}%`);
+    if (statTargets.median) countUp($("#stat-year"), statTargets.median, { from: statTargets.median - 80, format: year });
+    if (statTargets.oldest) countUp($("#stat-oldest"), statTargets.oldest, { from: statTargets.oldest - 80, format: year });
+  }
+
+  /* ---------- Hero orbit ---------- */
+  function renderOrbit() {
+    const pool = companies.filter((c) => c.website);
+    if (!pool.length) return;
+    const pick = (n, offset) => Array.from({ length: n }, (_, i) => pool[Math.floor(((i + offset) / n) * pool.length) % pool.length]);
+    const chip = (c, angle) => `
+      <button class="orbit__chip" type="button" tabindex="-1" data-index="${c.index}" style="--a0:${angle}deg">
+        <span class="orbit__chip-inner">
+          ${logoTile(c)}
+          <span class="orbit__label">${escapeHtml(c.searchName)}</span>
+        </span>
+      </button>`;
+    $("#orbit-outer").innerHTML = pick(6, 0).map((c, i) => chip(c, i * 60)).join("");
+    $("#orbit-inner").innerHTML = pick(3, 0.5).map((c, i) => chip(c, 30 + i * 120)).join("");
+  }
+
+  $(".orbit").addEventListener("click", (e) => {
+    const chip = e.target.closest(".orbit__chip");
+    if (chip) openCompany(+chip.dataset.index);
+  });
 
   function ingest(text) {
     companies = parseCSV(text).map(normalise);
+    related = new Map();
+    for (const c of companies) {
+      if (!c.groupKey) continue;
+      if (!related.has(c.groupKey)) related.set(c.groupKey, []);
+      related.get(c.groupKey).push(c);
+    }
     dataLoaded = true;
     loader.hidden = true;
     dataError.hidden = true;
-    updateStats();
     applyFilters();
+    renderOrbit();
+    updateStats();
   }
 
   async function loadData() {
@@ -553,9 +751,13 @@
   tintReset.addEventListener("click", () => {
     tintRadios.forEach((r) => (r.checked = false));
     delete section.dataset.tint;
+    tintReset.classList.remove("is-spinning");
+    void tintReset.offsetWidth;
+    tintReset.classList.add("is-spinning");
     tintReset.disabled = true;
     toast("Section color reset");
   });
+  tintReset.addEventListener("animationend", () => tintReset.classList.remove("is-spinning"));
 
   /* ======================================================================
      MODAL
@@ -564,38 +766,76 @@
   const modalFacts = $("#modal-facts");
   const modalPrev = $("#modal-prev");
   const modalNext = $("#modal-next");
+  const modalBody = $("#modal-body");
+  const modalRelated = $("#modal-related");
+  const relatedCount = $("#tab-related-count");
+  const tabs = $$('#modal [role="tab"]');
   let modalPos = -1;
   let returnFocus = null;
-
-  const ICONS = {
-    building: '<path d="M4 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16M16 9h2a2 2 0 0 1 2 2v10M2 21h20M8 7h4M8 11h4M8 15h4"/>',
-    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
-    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/>',
-    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
-    yen: '<path d="m6 3 6 8 6-8M12 11v10M7 12h10M7 16h10"/>',
-    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
-    link: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>',
-    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/>',
-  };
-  const icon = (name, size = 18) =>
-    `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
 
   function factRow(iconName, label, value, { href, copy = true } = {}) {
     const has = Boolean(value);
     const content = !has
-      ? "Not listed"
+      ? "記載なし"
       : href
-        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(value)}</a>`
+        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(value)}${icon("external", 16)}</a>`
         : escapeHtml(value);
     return `
       <div class="fact">
-        <span class="fact__icon">${icon(iconName)}</span>
+        <span class="fact__icon">${icon(iconName, 22)}</span>
         <dt>${label}</dt>
         <dd class="${has ? "" : "is-empty"}">
           <span class="fact__value">${content}</span>
-          ${has && copy ? `<button class="copy" type="button" data-copy="${escapeHtml(value)}" aria-label="Copy ${label}">${icon("copy", 15)}</button>` : ""}
+          ${has && copy ? `<button class="copy" type="button" data-copy="${escapeHtml(value)}" aria-label="${label}をコピー">${icon("copy", 16)}</button>` : ""}
         </dd>
       </div>`;
+  }
+
+  function setTab(name) {
+    tabs.forEach((tab) => {
+      const on = tab.id === `tab-${name}`;
+      tab.setAttribute("aria-selected", String(on));
+      tab.tabIndex = on ? 0 : -1;
+      $(`#${tab.getAttribute("aria-controls")}`).hidden = !on;
+    });
+    modalBody.scrollTop = 0;
+  }
+
+  function renderRelated(c) {
+    const siblings = (related.get(c.groupKey) || []).filter((o) => o !== c);
+    relatedCount.hidden = siblings.length === 0;
+    relatedCount.textContent = siblings.length;
+
+    const q = encodeURIComponent(c.searchName);
+    const links = [
+      { label: "Google で検索", href: `https://www.google.com/search?q=${q}`, icon: "search" },
+      { label: "Google マップ", href: `https://www.google.com/maps/search/?api=1&query=${q}`, icon: "pin" },
+      { label: "ニュースを探す", href: `https://news.google.com/search?q=${q}&hl=ja&gl=JP&ceid=JP:ja`, icon: "news" },
+    ];
+
+    const list = siblings.length
+      ? `<ul class="related__list">${siblings.map((o) => `
+          <li><button class="related__item" type="button" data-index="${o.index}">
+            ${logoTile(o, "related__mark")}
+            <span class="related__name">${escapeHtml(o.name)}</span>
+            <span class="related__meta">${o.year ? `${o.year}年設立` : ""}</span>
+            ${icon("chevron", 16)}
+          </button></li>`).join("")}</ul>`
+      : `<p class="related__empty">type.jp に同じ企業の他の掲載は見つかりませんでした。</p>`;
+
+    modalRelated.innerHTML = `
+      <section class="related__section">
+        <h3 class="related__title">${icon("layers", 18)}同じ企業の他の掲載</h3>
+        <p class="related__lead">事業部・支店ごとの掲載や登録ページをまとめて表示します。</p>
+        ${list}
+      </section>
+      <section class="related__section">
+        <h3 class="related__title">${icon("search", 18)}外部で調べる</h3>
+        <p class="related__lead">「${escapeHtml(c.searchName)}」を外部サイトで検索します。</p>
+        <div class="related__links">${links.map((l) => `
+          <a class="related__link" href="${escapeHtml(l.href)}" target="_blank" rel="noopener noreferrer">${icon(l.icon, 18)}<span>${l.label}</span>${icon("external", 15)}</a>`).join("")}
+        </div>
+      </section>`;
   }
 
   function fillModal(pos) {
@@ -604,26 +844,27 @@
     modalPos = pos;
 
     const avatar = $("#modal-avatar");
-    avatar.textContent = c.initial;
-    avatar.style.setProperty("--h", c.hue);
+    avatar.innerHTML = `<span>${escapeHtml(c.initial)}</span>`;
+    avatar.style.setProperty("--h", c.tileHue);
     $("#modal-index").textContent = `${fmtInt.format(pos + 1)} / ${fmtInt.format(view.length)}`;
     $("#modal-name").textContent = c.name;
 
     const inlineSite = $("#modal-site-inline");
     inlineSite.hidden = !c.website;
-    inlineSite.textContent = c.host;
+    $("#modal-site-host").textContent = c.host;
     if (c.website) inlineSite.href = c.website; else inlineSite.removeAttribute("href");
 
     modalFacts.innerHTML = [
-      factRow("building", "Company name", c.name),
-      factRow("user", "Representative", c.representative),
-      factRow("users", "Employees", c.employees),
-      factRow("calendar", "Founded", c.founded),
-      factRow("yen", "Capital", c.capital),
-      factRow("globe", "Website", c.website, { href: c.website }),
-      factRow("link", "type.jp profile", c.typeUrl, { href: c.typeUrl }),
+      factRow("building", "会社名", c.name),
+      factRow("user", "代表者", c.representative),
+      factRow("users", "従業員数", c.employees),
+      factRow("calendar", "設立", c.founded),
+      factRow("yen", "資本金", c.capital),
+      factRow("globe", "Webサイト", c.website, { href: c.website }),
+      factRow("link", "type.jp プロフィール", c.typeUrl, { href: c.typeUrl }),
     ].join("");
-    modalFacts.scrollTop = 0;
+    renderRelated(c);
+    modalBody.scrollTop = 0;
 
     const web = $("#modal-web");
     if (c.website) { web.href = c.website; web.removeAttribute("aria-disabled"); web.tabIndex = 0; }
@@ -635,10 +876,23 @@
     modalNext.disabled = pos >= view.length - 1;
   }
 
+  // Slide the new company's content in from the direction of travel.
+  function swapAnimation(delta) {
+    if (reducedMotion.matches) return;
+    modal.style.setProperty("--swap-from", `${delta < 0 ? -16 : 16}px`);
+    modal.classList.remove("is-swapping");
+    void modal.offsetWidth;
+    modal.classList.add("is-swapping");
+  }
+  modal.addEventListener("animationend", (e) => {
+    if (e.animationName === "swapIn") modal.classList.remove("is-swapping");
+  });
+
   function openModal(pos, trigger) {
     returnFocus = trigger || document.activeElement;
+    setTab("info");
     fillModal(pos);
-    modal.classList.remove("is-closing");
+    modal.classList.remove("is-closing", "is-swapping");
     if (!modal.open) modal.showModal();
     $("#modal-close").focus();
   }
@@ -650,7 +904,7 @@
       modal.close();
       if (returnFocus && document.contains(returnFocus) && !immediate) returnFocus.focus({ preventScroll: true });
     };
-    if (immediate || matchMedia("(prefers-reduced-motion: reduce)").matches) return finish();
+    if (immediate || reducedMotion.matches) return finish();
     modal.classList.add("is-closing");
     setTimeout(finish, 190);
   }
@@ -661,16 +915,57 @@
     // Make sure the card exists in the grid so focus can return to it.
     while (rendered <= next) renderMore();
     fillModal(next);
+    swapAnimation(delta);
     returnFocus = grid.querySelector(`.card[data-pos="${next}"]`);
+  }
+
+  // Opens a company by its CSV index, clearing filters if they hide it.
+  function openCompany(index) {
+    let pos = view.findIndex((c) => c.index === index);
+    if (pos < 0) {
+      searchInput.value = "";
+      webFilter.checked = false;
+      applyFilters();
+      pos = view.findIndex((c) => c.index === index);
+    }
+    if (pos < 0) return;
+    while (rendered <= pos) renderMore();
+    const card = grid.querySelector(`.card[data-pos="${pos}"]`);
+    if (modal.open) {
+      setTab("info");
+      fillModal(pos);
+      swapAnimation(1);
+      returnFocus = card;
+      $("#modal-close").focus();
+    } else {
+      openModal(pos, card);
+    }
   }
 
   $("#modal-close").addEventListener("click", () => closeModal());
   modalPrev.addEventListener("click", () => step(-1));
   modalNext.addEventListener("click", () => step(1));
+
+  tabs.forEach((tab) => tab.addEventListener("click", () => setTab(tab.id.replace("tab-", ""))));
+  $("#modal .modal__tabs").addEventListener("keydown", (e) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const i = tabs.indexOf(document.activeElement);
+    const next = e.key === "Home" ? 0
+      : e.key === "End" ? tabs.length - 1
+      : (i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[next].focus();
+    setTab(tabs[next].id.replace("tab-", ""));
+  });
+
+  modalRelated.addEventListener("click", (e) => {
+    const item = e.target.closest(".related__item");
+    if (item) openCompany(+item.dataset.index);
+  });
   modal.addEventListener("cancel", (e) => { e.preventDefault(); closeModal(); });
   modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
   modal.addEventListener("keydown", (e) => {
-    if (e.target.closest("input, select, textarea")) return;
+    if (e.target.closest('input, select, textarea, [role="tablist"]')) return;
     if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
     if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
   });
@@ -679,9 +974,9 @@
     if (!btn) return;
     try {
       await navigator.clipboard.writeText(btn.dataset.copy);
-      toast("Copied to clipboard");
+      toast("コピーしました");
     } catch {
-      toast("Copy isn’t available here");
+      toast("コピーできませんでした");
     }
   });
 
@@ -692,13 +987,36 @@
   let toastTimer;
   function toast(msg) {
     toastEl.textContent = msg;
-    toastEl.classList.add("is-visible");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => toastEl.classList.remove("is-visible"), 1800);
+    // Re-showing the popover moves it to the top of the top layer, above an open modal.
+    if (typeof toastEl.showPopover === "function") {
+      try { toastEl.hidePopover(); } catch { /* not open */ }
+      toastEl.showPopover();
+    }
+    toastEl.classList.remove("is-visible");
+    requestAnimationFrame(() => requestAnimationFrame(() => toastEl.classList.add("is-visible")));
+    toastTimer = setTimeout(() => {
+      toastEl.classList.remove("is-visible");
+      toastTimer = setTimeout(() => { try { toastEl.hidePopover?.(); } catch { /* ignore */ } }, 300);
+    }, 1800);
   }
 
+  // Top bar state, scroll progress and back-to-top button.
   const topbar = $(".topbar");
-  addEventListener("scroll", () => topbar.classList.toggle("is-scrolled", scrollY > 8), { passive: true });
+  const backtop = $("#backtop");
+  let scrollFrame = 0;
+  function onScroll() {
+    scrollFrame = 0;
+    const max = document.documentElement.scrollHeight - innerHeight;
+    topbar.classList.toggle("is-scrolled", scrollY > 8);
+    topbar.style.setProperty("--progress", max > 0 ? Math.min(1, scrollY / max).toFixed(4) : "0");
+    const show = scrollY > 900;
+    backtop.classList.toggle("is-visible", show);
+    backtop.tabIndex = show ? 0 : -1;
+    backtop.setAttribute("aria-hidden", String(!show));
+  }
+  addEventListener("scroll", () => { if (!scrollFrame) scrollFrame = requestAnimationFrame(onScroll); }, { passive: true });
+  backtop.addEventListener("click", () => scrollTo({ top: 0, behavior: reducedMotion.matches ? "auto" : "smooth" }));
 
   $("#relock").addEventListener("click", relock);
 
@@ -707,7 +1025,7 @@
      ====================================================================== */
   renderPin();
   if (store.get(SESSION_KEY) === "1") {
-    lock.classList.add("is-unlocked");
+    lock.classList.add("is-unlocked", "is-instant");
     unlock();
   } else {
     pinInput.focus({ preventScroll: true });
